@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registro de Asistencia</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .container img {
+      max-width: 160px;
+      display: block;
+      margin: 0 auto 20px;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    input,
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:disabled {
+      background-color: #999;
+      cursor: not-allowed;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px;
+      margin-top: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+
+    #mensaje {
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    #ubicacionTexto {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #444;
+    }
+
+    .map-container {
+      position: relative;
+      padding-bottom: 56.25%;
+      height: 0;
+      overflow: hidden;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    .map-container iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+
+    @media (max-width: 500px) {
+      .container {
+        margin: 20px;
+      }
+
+      input,
+      button {
+        font-size: 15px;
+      }
+    }
+
+    input:invalid {
+      border-color: #dc3545;
+    }
+
+    input:valid {
+      border-color: #28a745;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <img src="https://i.postimg.cc/WzV1W7fP/transparente.png" alt="Logo Empresa">
+    <h2>Registro de Asistencia</h2>
+    <p id="reloj" style="text-align:center; font-size:18px; font-weight:bold;"></p>
+    <form id="form">
+      <input type="text" id="dni" placeholder="DNI (8 dígitos)" maxlength="8" pattern="\d{8}" required
+        oninput="this.value = this.value.replace(/\D/g, '').slice(0, 8);">
+      <input type="text" id="nombre" placeholder="Nombre completo" required
+        pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ]+( [A-Za-zÁÉÍÓÚáéíóúÑñ]+)+$">
+      <select id="unidad" required>
+        <option value="">- Seleccione Unidad -</option>
+      </select>
+      <select id="turno" required>
+        <option value="">- Seleccione Turno -</option>
+        <option value="Dia">Dia</option>
+        <option value="Noche">Noche</option>
+      </select>
+      <select id="tipo_registro" required>
+        <option value="">- Seleccione Tipo Registro -</option>
+        <option value="Entrada">Entrada</option>
+        <option value="Salida">Salida</option>
+      </select>
+      <input type="text" id="hora" placeholder="Hora del registro" readonly>
+      <input type="hidden" id="lat">
+      <input type="hidden" id="lon">
+      <button type="submit" id="btnEnviar">Registrar Asistencia</button>
+    </form>
+    <div id="mensaje"></div>
+    <div id="ubicacionTexto"></div>
+  </div>
+
+<script>
+  const apiUrl = "http://localhost:5500/api/asistencia";
+  const apiUrlU = "http://localhost:3000/api/asistencia/unidades";
+
+  // Reloj en tiempo real
+  setInterval(() => {
+    const ahora = new Date();
+    document.getElementById('reloj').textContent = ahora.toLocaleTimeString('es-PE', { hour12: false });
+  }, 1000);
+
+  // Al cargar la página
+  window.onload = () => {
+    // Mostrar hora actual en input
+    const ahora = new Date();
+    const pad = num => num.toString().padStart(2, '0');
+    const fechaHora = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+    document.getElementById('hora').value = fechaHora;
+
+    // Cargar unidades desde backend
+    fetch(apiUrl + "/unidades")
+      .then(res => res.json())
+      .then(unidades => {
+        const select = document.getElementById('unidad');
+        unidades.forEach(u => {
+          const option = document.createElement('option');
+          option.value = u.id;
+          option.textContent = u.nombre;
+          option.dataset.lat = u.latitud;
+          option.dataset.lon = u.longitud;
+          select.appendChild(option);
+        });
+      })
+      .catch(err => {
+        console.error("Error al cargar unidades:", err);
+        document.getElementById('mensaje').textContent = "❌ No se pudieron cargar las unidades.";
+        document.getElementById('btnEnviar').disabled = true;
+      });
+
+    // Obtener geolocalización
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lon = pos.coords.longitude.toFixed(6);
+        document.getElementById('lat').value = lat;
+        document.getElementById('lon').value = lon;
+
+        document.getElementById('ubicacionTexto').innerHTML = `
+          <p>📍 Ubicación detectada:</p>
+          <p>Latitud: ${lat}, Longitud: ${lon}</p>
+          <div class="map-container">
+            <iframe
+              src="https://maps.google.com/maps?q=${lat},${lon}&z=16&output=embed"
+              allowfullscreen>
+            </iframe>
+          </div>`;
+      }, () => {
+        document.getElementById('mensaje').textContent = "❌ No se pudo obtener tu ubicación.";
+        document.getElementById('btnEnviar').disabled = true;
+      });
+    } else {
+      document.getElementById('mensaje').textContent = "❌ Tu navegador no soporta geolocalización.";
+      document.getElementById('btnEnviar').disabled = true;
+    }
+  };
+
+  // Al enviar el formulario
+  document.getElementById('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    const dni = document.getElementById('dni').value.trim();
+    const nombre = document.getElementById('nombre').value.trim();
+    const unidadSelect = document.getElementById('unidad');
+    const idUnidad = unidadSelect.value;
+    const unidadLat = parseFloat(unidadSelect.selectedOptions[0].dataset.lat);
+    const unidadLon = parseFloat(unidadSelect.selectedOptions[0].dataset.lon);
+    const turno = document.getElementById('turno').value.trim();
+    const tipo_registro = document.getElementById('tipo_registro').value.trim();
+    const hora = document.getElementById('hora').value;
+    const lat = parseFloat(document.getElementById('lat').value);
+    const lon = parseFloat(document.getElementById('lon').value);
+
+    if (!idUnidad) {
+      document.getElementById('mensaje').textContent = "⚠️ Selecciona una unidad.";
+      return;
+    }
+
+    if (dni.length !== 8 || !/^\d{8}$/.test(dni)) {
+      document.getElementById('mensaje').textContent = "⚠️ El DNI debe tener 8 dígitos numéricos.";
+      return;
+    }
+
+    const distancia = calcularDistancia(lat, lon, unidadLat, unidadLon);
+    if (distancia > 100) {
+      document.getElementById('mensaje').textContent =
+        `🚫 Estás fuera del rango permitido (${distancia.toFixed(1)} m).`;
+      return;
+    }
+
+    const data = {
+      dni,
+      nombre,
+      id_unidad: idUnidad,
+      turno,
+      tipo_registro,
+      latitud: lat,
+      longitud: lon,
+      fecha_hora: hora
+    };
+
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+      .then(res => res.text().then(text => ({ status: res.status, body: text })))
+      .then(({ status, body }) => {
+        if (status >= 200 && status < 300) {
+          document.getElementById('form').style.display = 'none';
+          document.getElementById('ubicacionTexto').innerHTML = "";
+          const mensaje = document.getElementById('mensaje');
+          mensaje.innerHTML = "✅ Asistencia registrada con éxito.";
+          mensaje.style.color = "green";
+          mensaje.style.fontSize = "24px";
+          mensaje.style.textAlign = "center";
+        } else {
+          document.getElementById('mensaje').textContent = `❌ ${body}`;
+        }
+      })
+      .catch(err => {
+        console.error("ERROR:", err);
+        document.getElementById('mensaje').textContent = "❌ Ocurrió un error inesperado.";
+      });
+  });
+
+  // Fórmula Haversine para distancia entre coordenadas
+  function calcularDistancia(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLon = (lon2 - lon1) * rad;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+              Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // en metros
+  }
+
+  // Aviso sin internet
+  window.addEventListener('offline', () => {
+    alert("🚫 Estás sin conexión. El registro no funcionará.");
+  });
+</script>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+
+</body>
+
+</html>
