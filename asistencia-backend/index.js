@@ -5,7 +5,7 @@ const bodyParser = require('body-parser');
 const asistenciaRoutes = require('./routes/asistencia');
 
 const app = express();
-const PORT = 5500;
+const PORT = process.env.PORT || 5500; // <-- CORREGIDO
 
 app.use(cors());
 app.use(bodyParser.json());
