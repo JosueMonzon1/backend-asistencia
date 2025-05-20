@@ -2,7 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const asistenciaRoutes = require('./asistencia');
+const asistenciaRoutes = require('../asistencia');
 
 const app = express();
 const PORT = process.env.PORT || 5500; // <-- CORREGIDO
